@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-012",
+  "name": "XML External Entity Injection (XXE) Detection",
+  "spl_file": "rule_12_xxe.spl",
+  "description": "Detects XXE including SYSTEM/PUBLIC entity attacks, file exfiltration, XML Billion Laughs DoS, parameter entities, PHP wrappers, schema-based XXE",
+  "severity": "HIGH",
+  "mitre_id": "T1190",
+  "owasp": "A03:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

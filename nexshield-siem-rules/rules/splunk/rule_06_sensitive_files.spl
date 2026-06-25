@@ -1,0 +1,54 @@
+`nexshield_base`
+| eval uri_check=lower(coalesce(decoded_uri, request_uri, final_endpoint, ""))
+| eval file_score=0
+| eval file_category=""
+
+`comment("Tier 1 - CRITICAL: secrets and credentials")`
+| eval file_score=file_score + if(match(uri_check, "(^|\/)\.env($|[\.\?])|\/\.env\.(bak|local|prod|dev|staging|backup|old|copy|orig|swp|tmp)"), 10, 0)
+| eval file_category=if(match(uri_check, "\.env"), "Environment Secrets", file_category)
+
+| eval file_score=file_score + if(match(uri_check, "\/\.ssh\/|\/id_rsa($|\.)|\/id_dsa|\/id_ecdsa|\/id_ed25519|\/authorized_keys|\/known_hosts"), 10, 0)
+| eval file_category=if(match(uri_check, "\.ssh|id_rsa|authorized_keys"), "SSH Keys", file_category)
+
+| eval file_score=file_score + if(match(uri_check, "\/\.git(\/|$|config|credentials|index|HEAD|ORIG_HEAD)|\/\.gitconfig|\/\.gitcredentials"), 9, 0)
+| eval file_category=if(match(uri_check, "\.git"), "Git Repository / Credentials", file_category)
+
+`comment("Tier 2 - HIGH: config files with credentials")`
+| eval file_score=file_score + if(match(uri_check, "wp-config\.php|configuration\.php|config\.php|settings\.php|database\.php|db\.php|dbconfig\.php|connection\.php|credentials\.php"), 9, 0)
+| eval file_category=if(match(uri_check, "config\.php|settings\.php|database\.php"), "PHP Config", file_category)
+
+| eval file_score=file_score + if(match(uri_check, "docker-compose\.ya?ml|dockerfile(\..*)?$|\.dockerignore|docker-compose\.override"), 8, 0)
+| eval file_category=if(match(uri_check, "docker"), "Docker Config", file_category)
+
+| eval file_score=file_score + if(match(uri_check, "web\.config|applicationhost\.config|machine\.config|global\.asax|app\.config"), 8, 0)
+| eval file_score=file_score + if(match(uri_check, "application\.ya?ml|application\.properties|appsettings\.json|secrets\.ya?ml|secrets\.json|bootstrap\.ya?ml"), 9, 0)
+
+`comment("Tier 3 - MEDIUM: dependency and build files")`
+| eval file_score=file_score + if(match(uri_check, "composer\.(json|lock)|package\.(json|lock)|yarn\.lock|gemfile(\.lock)?|requirements\.txt|pipfile(\.lock)?|cargo\.toml"), 6, 0)
+| eval file_score=file_score + if(match(uri_check, "\.(bak|backup|old|orig|copy|swp|tmp|~)$|\.sql$|dump\.sql|backup\.sql|db\.dump"), 7, 0)
+| eval file_score=file_score + if(match(uri_check, "\/\.htpasswd|\/\.htaccess|\/\.htgroups"), 8, 0)
+
+`comment("Cloud metadata endpoints")`
+| eval file_score=file_score + if(match(uri_check, "169\.254\.169\.254|metadata\/computeMetadata|metadata\/instance|aws_access_key|imds"), 10, 0)
+| eval file_category=if(match(uri_check, "169\.254|metadata"), "Cloud Metadata", file_category)
+
+| where file_score >= 5
+| bucket _time span=10m
+| stats
+    max(file_score)           as max_score
+    count                     as attempt_count
+    values(uri_check)         as attempted_files
+    values(http_status)       as responses
+    values(file_category)     as file_types
+    dc(uri_check)             as unique_files
+    by final_ip, _time
+
+`comment("Bonus score for scanning behavior")`
+| eval total_score=max_score + case(unique_files>=20, 10, unique_files>=10, 5, unique_files>=5, 3, true(), 0)
+
+| eval severity=case(total_score>=15, "CRITICAL", total_score>=10, "HIGH", true(), "MEDIUM")
+| eval attack_type="Sensitive File Reconnaissance"
+| eval mitre_id="T1083"
+| eval owasp="A05:2021 - Security Misconfiguration"
+| sort -total_score
+| table _time, final_ip, attempt_count, unique_files, file_types, attempted_files, responses, total_score, severity, attack_type, mitre_id, owasp

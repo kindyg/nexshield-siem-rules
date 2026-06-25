@@ -1,0 +1,76 @@
+index=mail_logs
+| eval raw_lower=lower(_raw)
+
+`comment("Categorize mail events")`
+| eval auth_failure=if(match(raw_lower,
+    "authentication failure|failed|invalid user|login failed|" .
+    "sasl.*authentication failed|disconnect.*auth|too many auth|" .
+    "535|534|550.*user unknown|credentials.*invalid|password.*incorrect|" .
+    "bad.*password|authentication.*error|auth.*fail"), 1, 0)
+
+| eval relay_attempt=if(match(raw_lower,
+    "relay access denied|550.*relay|553.*relay|we do not relay|" .
+    "relaying denied|not permitted to relay|mail rejected"), 1, 0)
+
+| eval spam_or_malware=if(match(raw_lower,
+    "spam|blocked|blacklist|rbl|dnsbl|spamassassin|banned|" .
+    "virus|malware|trojan|ransomware|phishing|blocked attachment|" .
+    "dangerous content|content filter|policy violation"), 1, 0)
+
+| eval brute_indicator=if(match(raw_lower,
+    "too many connections|connection rate limit|maximum.*login|" .
+    "too many auth|disconnected.*attempts|blocked.*too many"), 1, 0)
+
+`comment("Extract source IP from various mail log formats")`
+| rex field=_raw "(?:rhost=|client=\S+\[|from=<?\S*@?\S*>?\s+\[|connect from \S+\[)(?P<src_ip>\d+\.\d+\.\d+\.\d+)"
+| rex field=_raw "(?:user=|sasl_username=|for <?)(?P<attempted_user>[^\s>@,\]]+)"
+| rex field=_raw "(?:to=<?)(?P<target_user>[^\s>@,\]]+@\S+)"
+
+| where isnotnull(src_ip)
+
+`comment("Exclude localhost / internal - reduce false positives")`
+| where NOT match(src_ip, "^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)") 
+
+| bucket _time span=10m
+| stats
+    sum(auth_failure)     as failed_auths
+    sum(relay_attempt)    as relay_attempts
+    sum(spam_or_malware)  as spam_events
+    sum(brute_indicator)  as brute_signals
+    dc(attempted_user)    as unique_users
+    values(attempted_user) as tried_users
+    dc(target_user)       as unique_targets
+    count                 as total_events
+    by src_ip, _time
+
+| eval mail_score=0
+| eval mail_score=mail_score + if(failed_auths>=5,  5, 0)
+| eval mail_score=mail_score + if(failed_auths>=20, 5, 0)
+| eval mail_score=mail_score + if(failed_auths>=50, 5, 0)
+| eval mail_score=mail_score + if(relay_attempts>=1, 8, 0)
+| eval mail_score=mail_score + if(unique_users>=3,  4, 0)
+| eval mail_score=mail_score + if(unique_users>=10, 4, 0)
+| eval mail_score=mail_score + if(spam_events>=5,   3, 0)
+| eval mail_score=mail_score + if(brute_signals>=2, 5, 0)
+| eval mail_score=mail_score + if(unique_targets>=20, 4, 0)
+
+| where mail_score >= 5
+
+| eval attack_type=case(
+    relay_attempts>=1                       , "Open Mail Relay Exploitation",
+    unique_users>=10 AND failed_auths>=20   , "Mail Credential Stuffing Attack",
+    brute_signals>=2 AND failed_auths>=20   , "High-Volume Mail Brute Force",
+    failed_auths>=10 AND unique_users>=3    , "Mail Password Spraying",
+    spam_events>=10                         , "Spam / Malware Campaign",
+    unique_targets>=20                      , "Mail Harvesting / Enumeration",
+    true()                                  , "Suspicious Mail Server Activity")
+
+| eval severity=case(
+    relay_attempts>=1 OR failed_auths>=50       , "CRITICAL",
+    failed_auths>=20 OR unique_users>=10        , "HIGH",
+    true()                                      , "MEDIUM")
+
+| eval mitre_id="T1110.001"
+| eval owasp="A07:2021 - Identification and Authentication Failures"
+| sort -mail_score
+| table _time, src_ip, failed_auths, relay_attempts, unique_users, tried_users, spam_events, mail_score, severity, attack_type, mitre_id, owasp

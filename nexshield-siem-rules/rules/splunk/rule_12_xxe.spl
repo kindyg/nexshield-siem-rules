@@ -1,0 +1,45 @@
+`nexshield_base`
+| eval raw_lower=lower(raw_log)
+| eval xxe_score=0
+
+`comment("Core XXE patterns")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "<!doctype[\s\S]{0,200}<!entity"), 10, 0)
+| eval xxe_score=xxe_score + if(match(raw_lower, "<!entity[\s]+\w+[\s]+(system|public)[\s]+['\"]"), 10, 0)
+
+`comment("File exfiltration via SYSTEM")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "system\s+['\"]file:\/\/\/etc|system\s+['\"]file:\/\/\/windows|system\s+['\"]file:\/\/\/proc"), 10, 0)
+| eval xxe_score=xxe_score + if(match(raw_lower, "system\s+['\"]http[s]?:\/\/|system\s+['\"]ftp:\/\/|system\s+['\"]php:\/\/"), 9, 0)
+
+`comment("Parameter entity XXE")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "%xxe|%external|%data|%file|%remote"), 9, 0)
+| eval xxe_score=xxe_score + if(match(raw_lower, "&xxe;|&external;|&bomb;|&data;"), 9, 0)
+
+`comment("Direct file paths in XML")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "file:\/\/\/etc\/(passwd|shadow|hosts|sudoers)|file:\/\/\/windows\/(system32|win\.ini)"), 10, 0)
+| eval xxe_score=xxe_score + if(match(raw_lower, "file:\/\/\/proc\/(self|version|cmdline|net\/tcp)"), 10, 0)
+
+`comment("PHP/other wrappers in XML")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "php:\/\/filter|expect:\/\/|phar:\/\/|zip:\/\/"), 8, 0)
+
+`comment("XML Bomb / Billion Laughs DoS")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "billion.laugh|xml.bomb|lol\d+|ha\d+"), 9, 0)
+| eval xxe_score=xxe_score + if(match(raw_lower, "<!entity\s+\w+\s+['\"]&\w+;&\w+;&\w+;"), 9, 0)
+
+`comment("CDATA sections - can be used to smuggle content")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "<!\[cdata\[.*\]\]>"), 5, 0)
+
+`comment("Schema-based XXE")`
+| eval xxe_score=xxe_score + if(match(raw_lower, "xsi:schemalocation\s*=\s*['\"]https?:\/\/|xmlns.*['\"]http[s]?:\/\/((?!w3\.org|xmlsoap\.org|oasis-open\.org)\S)+"), 6, 0)
+
+| where xxe_score >= 5
+| stats
+    max(xxe_score)        as risk_score
+    count                 as attempt_count
+    values(http_status)   as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type="XML External Entity Injection (XXE)"
+| eval mitre_id="T1190"
+| eval owasp="A03:2021 - Injection"
+| sort -risk_score
+| table final_ip, attempt_count, responses, risk_score, severity, attack_type, mitre_id, owasp

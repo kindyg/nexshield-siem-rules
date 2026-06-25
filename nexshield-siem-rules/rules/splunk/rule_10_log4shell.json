@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-010",
+  "name": "Log4Shell Exploitation Detection (CVE-2021-44228)",
+  "spl_file": "rule_10_log4shell.spl",
+  "description": "Detects Log4Shell exploitation including all known bypasses: nested lookups, lower/upper obfuscation, URL encoding, triple nesting, header injection vectors, base64 in payloads",
+  "severity": "CRITICAL",
+  "mitre_id": "T1190",
+  "owasp": "A06:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

@@ -1,0 +1,52 @@
+`nexshield_base`
+| eval uri_to_check=lower(coalesce(decoded_uri, request_uri, ""))
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval raw_lower=lower(raw_log)
+| eval cmdi_score=0
+
+`comment("Shell operators followed by OS commands")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "[;&|`]\s*(ls|id|whoami|uname|cat|wget|curl|chmod|chown|cp|mv|rm|mkdir|touch|echo|ping|nc|ncat|netcat|python|perl|ruby|php|bash|sh|dash|zsh)\b"), 9, 0)
+
+`comment("Command substitution patterns")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "\$\([^)]+\)|`[^`]+`|\$\{IFS\}|\${IFS}"), 8, 0)
+
+`comment("Shell interpreter paths - Linux")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "\/bin\/(sh|bash|dash|zsh|ksh|csh|tcsh)|\/usr\/bin\/(python[23]?|perl|ruby|php|node|lua)"), 10, 0)
+
+`comment("Windows shells")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "cmd\.exe|powershell\.exe|wscript\.exe|cscript\.exe|mshta\.exe|rundll32\.exe|regsvr32\.exe|certutil\.exe|bitsadmin\.exe"), 10, 0)
+
+`comment("URL-encoded shell operators")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "%3b(ls|id|whoami|cat|wget)|%7c(cat|ls|id|wget)|%60(ls|id|whoami)%60|%26%26|%7c%7c"), 9, 0)
+
+`comment("Remote payload download")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "wget\s+(https?|ftp):\/\/|curl\s+(https?|ftp):\/\/|curl\s+-[oO]\s|wget\s+-[oO]\s"), 8, 0)
+
+`comment("Base64 obfuscation")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "base64\s+-d|base64\s+--decode|echo\s+[a-z0-9+\/]{20,}=*\s*\|\s*base64|eval\s*\(\s*base64"), 8, 0)
+
+`comment("Scripting language one-liners")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "python[23]?\s+-c\s*['\"]|perl\s+-e\s*['\"]|ruby\s+-e\s*['\"]|php\s+-r\s*['\"]|node\s+-e\s*['\"]"), 9, 0)
+
+`comment("Reverse shell indicators")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "\/dev\/tcp\/|\/dev\/udp\/|bash\s+-i|sh\s+-i|mkfifo|mknod"), 10, 0)
+
+`comment("IFS evasion - replaces spaces to bypass filters")`
+| eval cmdi_score=cmdi_score + if(match(uri_to_check, "\$\{IFS\}|\$IFS|%09cat|%09ls|%09id"), 8, 0)
+
+`comment("Double-decoded check")`
+| eval cmdi_score=cmdi_score + if(match(double_decoded, "[;&|`]\s*(ls|id|whoami|cat|wget|curl)|\/bin\/bash|cmd\.exe"), 10, 0)
+
+| where cmdi_score >= 5
+| stats
+    max(cmdi_score)     as risk_score
+    count               as attempt_count
+    values(uri_to_check) as payloads
+    values(http_status) as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type="Command Injection Attempt"
+| eval mitre_id="T1059"
+| eval owasp="A03:2021 - Injection"
+| sort -risk_score
+| table final_ip, attempt_count, payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-007",
+  "name": "Command Injection Detection",
+  "spl_file": "rule_07_command_injection.spl",
+  "description": "Detects OS command injection including shell operators, reverse shells, IFS evasion, base64 obfuscation, Windows/Linux shell paths, URL-encoded variants",
+  "severity": "CRITICAL",
+  "mitre_id": "T1059",
+  "owasp": "A03:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

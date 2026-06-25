@@ -1,0 +1,12 @@
+index=web_logs
+| spath log
+| eval raw_log=coalesce(log, _raw)
+| eval src_ip=coalesce(ip, mvindex(split(raw_log," "),0))
+| rex field=raw_log "\"(?P<http_method>GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(?P<request_uri>\S+)\s+HTTP"
+| rex field=raw_log "HTTP\/\d\.\d\"\s+(?P<http_status>\d+)"
+| rex field=raw_log "\"\s*(?P<user_agent>[^\"]+)\"\s*$"
+| eval decoded_uri=urldecode(request_uri)
+| eval final_endpoint=coalesce(endpoint, request_uri)
+| eval final_ip=coalesce(src_ip, ip)
+| eval final_ua=coalesce(user_agent, ua, "unknown")
+| where isnotnull(final_ip)

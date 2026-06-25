@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-004",
+  "name": "Brute Force Login Detection",
+  "spl_file": "rule_04_brute_force.spl",
+  "description": "Detects brute force, credential stuffing (rotating UAs), password spraying (multiple endpoints) with rate calculation and distributed attack detection",
+  "severity": "CRITICAL",
+  "mitre_id": "T1110",
+  "owasp": "A07:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

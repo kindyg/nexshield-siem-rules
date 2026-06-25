@@ -1,0 +1,48 @@
+`nexshield_base`
+| eval uri_to_check=lower(coalesce(decoded_uri, request_uri, ""))
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval raw_lower=lower(raw_log)
+| eval ssrf_score=0
+
+`comment("Cloud metadata endpoints - highest priority")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "169\.254\.169\.254"), 10, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "metadata\.google\.internal|metadata\/computeMetadata|metadata\/instance|169\.254\.169\.254\/latest"), 10, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "metadata\.azure\.com|management\.azure\.com\/metadata|169\.254\.170\.2"), 10, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "fd00:ec2::254|100\.100\.100\.200"), 10, 0)
+
+`comment("Localhost variants including bypass tricks")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "\blocalhost\b|127\.0\.0\.1|127\.\d+\.\d+\.\d+|0\.0\.0\.0"), 8, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "::1|0x7f000001|017700000001|0x7f\.0x0\.0x0\.0x1|2130706433"), 9, 0)
+
+`comment("Private IP ranges")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}"), 7, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}"), 7, 0)
+
+`comment("Dangerous protocol handlers")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "file:\/\/|dict:\/\/|gopher:\/\/|sftp:\/\/|ldap:\/\/|ldaps:\/\/|tftp:\/\/"), 9, 0)
+
+`comment("PHP wrappers often used with SSRF")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "php:\/\/input|php:\/\/filter|zip:\/\/|phar:\/\/|expect:\/\/|data:\/\/"), 8, 0)
+
+`comment("Open redirect params that can lead to SSRF")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "[?&](url|redirect|next|target|dest|go|return|returnto|redir|location|forward|callback|host|proxy|fetch|image|load|img|src)=https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)", ), 9, 0)
+
+`comment("AWS/cloud credential theft")`
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "aws_access_key|aws_secret|x-amz-security-token|x-amz-credential|iam\/security-credentials"), 10, 0)
+
+`comment("Double-encoded bypass")`
+| eval ssrf_score=ssrf_score + if(match(double_decoded, "169\.254\.169\.254|localhost|127\.0\.0\.1|file:\/\/"), 10, 0)
+
+| where ssrf_score >= 5
+| stats
+    max(ssrf_score)       as risk_score
+    count                 as attempt_count
+    values(uri_to_check)  as payloads
+    values(http_status)   as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type="Server-Side Request Forgery (SSRF)"
+| eval mitre_id="T1190"
+| eval owasp="A10:2021 - Server-Side Request Forgery"
+| sort -risk_score
+| table final_ip, attempt_count, payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

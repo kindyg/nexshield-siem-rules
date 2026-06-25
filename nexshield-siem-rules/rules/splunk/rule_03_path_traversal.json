@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-003",
+  "name": "Path Traversal Attack Detection",
+  "spl_file": "rule_03_path_traversal.spl",
+  "description": "Detects path traversal including single/double/triple URL encoding, null bytes, unicode tricks, Windows and Linux sensitive file targets",
+  "severity": "HIGH",
+  "mitre_id": "T1083",
+  "owasp": "A01:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

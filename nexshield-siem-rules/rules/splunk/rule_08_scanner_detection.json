@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-008",
+  "name": "Security Scanner and Bot Detection",
+  "spl_file": "rule_08_scanner_detection.spl",
+  "description": "Detects known security scanners by UA (SQLMap, Nikto, Burp, Nessus, FFUF, Nuclei etc), exploitation frameworks, empty/suspicious UAs, and behavioral scanning patterns that bypass UA spoofing",
+  "severity": "HIGH",
+  "mitre_id": "T1595",
+  "owasp": "A05:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

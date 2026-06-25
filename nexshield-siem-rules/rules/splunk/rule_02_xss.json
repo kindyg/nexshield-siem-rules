@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-002",
+  "name": "Cross-Site Scripting (XSS) Detection",
+  "spl_file": "rule_02_xss.spl",
+  "description": "Detects XSS including DOM XSS, reflected, stored, protocol handlers, 100+ event handlers, encoding bypasses, double-URL encoding evasion",
+  "severity": "HIGH",
+  "mitre_id": "T1189",
+  "owasp": "A03:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

@@ -1,0 +1,60 @@
+`nexshield_base`
+| eval http_code=coalesce(http_status, tostring(status_code))
+| where http_code="404" OR http_code="403" OR http_code="401"
+| eval uri_check=lower(coalesce(decoded_uri, request_uri, ""))
+
+`comment("Detect common wordlist paths - reduces false positive noise")`
+| eval is_wordlist_path=if(match(uri_check,
+    "\/(admin|administrator|login|wp-admin|wp-login|phpmyadmin|cpanel|dashboard|manager|console|portal|" .
+    "api\/v[0-9]|swagger|graphql|actuator|metrics|health|debug|test|backup|old|tmp|temp|" .
+    "upload|uploads|files|include|includes|lib|libs|vendor|node_modules|\.git|\.svn|" .
+    "config|conf|logs|log|install|setup|cgi-bin|scripts|shell|cmd|exec|bin|" .
+    "user|users|account|accounts|profile|register|signup|forgot|reset|" .
+    "xmlrpc|feed|rss|sitemap|robots|\.well-known|server-status|phpinfo|" .
+    "secret|hidden|private|internal|staff|employee|hr|finance)"), 1, 0)
+
+| bucket _time span=10m
+| stats
+    count                   as total_errors
+    dc(uri_check)           as unique_paths
+    sum(is_wordlist_path)   as wordlist_hits
+    values(uri_check)       as tried_paths
+    dc(http_code)           as error_type_count
+    dc(final_ua)            as ua_count
+    by final_ip, _time
+
+| eval enum_score=0
+`comment("Path volume scoring")`
+| eval enum_score=enum_score + if(unique_paths>=5,  3, 0)
+| eval enum_score=enum_score + if(unique_paths>=10, 3, 0)
+| eval enum_score=enum_score + if(unique_paths>=25, 4, 0)
+| eval enum_score=enum_score + if(unique_paths>=50, 5, 0)
+
+`comment("Wordlist hit scoring - strong indicator of tool use")`
+| eval enum_score=enum_score + if(wordlist_hits>=3,  3, 0)
+| eval enum_score=enum_score + if(wordlist_hits>=10, 5, 0)
+
+`comment("Volume scoring")`
+| eval enum_score=enum_score + if(total_errors>=20, 3, 0)
+| eval enum_score=enum_score + if(total_errors>=50, 3, 0)
+
+`comment("UA rotation - tool rotating UAs = distributed scan")`
+| eval enum_score=enum_score + if(ua_count>=3, 2, 0)
+
+| where enum_score >= 5
+
+| eval severity=case(
+    unique_paths>=50 OR wordlist_hits>=20, "CRITICAL",
+    unique_paths>=20 OR wordlist_hits>=10, "HIGH",
+    true(), "MEDIUM")
+
+| eval attack_type=case(
+    wordlist_hits>=10 AND ua_count>=3, "Distributed Directory Brute Force",
+    wordlist_hits>=10,                 "Automated Directory Enumeration (Wordlist)",
+    unique_paths>=20,                  "Manual Directory Enumeration",
+    true(),                            "Suspicious 404/403 Scanning")
+
+| eval mitre_id="T1595.003"
+| eval owasp="A05:2021 - Security Misconfiguration"
+| sort -unique_paths
+| table _time, final_ip, total_errors, unique_paths, wordlist_hits, ua_count, tried_paths, enum_score, severity, attack_type, mitre_id, owasp

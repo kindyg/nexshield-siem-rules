@@ -1,0 +1,56 @@
+`nexshield_base`
+| eval is_failed_login=case(
+    status_code=401 OR http_status="401", 1,
+    match(raw_log, "\" 401 "), 1,
+    match(raw_log, "(?i)(invalid credentials|authentication failure|login failed|incorrect password|bad credentials|unauthorized)"), 1,
+    true(), 0)
+| where is_failed_login=1
+| where match(coalesce(final_endpoint, request_uri, ""), "(?i)(login|auth|signin|session|token|password|mfa|verify|account|user|logon|access)")
+| eval ua_lower=lower(coalesce(final_ua, ""))
+
+`comment("Exclude known monitoring systems - reduce false positives")`
+| where NOT match(final_ip, "^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)") OR isnotnull(http_status)
+
+| bucket _time span=5m
+| stats
+    count as failed_attempts
+    dc(final_ua) as ua_count
+    dc(final_endpoint) as targeted_endpoints
+    values(final_endpoint) as endpoints
+    values(final_ua) as user_agents
+    earliest(_time) as first_seen
+    latest(_time) as last_seen
+    by final_ip, _time
+
+| eval brute_score=0
+`comment("Volume-based scoring")`
+| eval brute_score=brute_score + if(failed_attempts>=5,  5, 0)
+| eval brute_score=brute_score + if(failed_attempts>=15, 5, 0)
+| eval brute_score=brute_score + if(failed_attempts>=50, 5, 0)
+
+`comment("Distributed indicators - rotating UAs = credential stuffing")`
+| eval brute_score=brute_score + if(ua_count>3, 5, 0)
+| eval brute_score=brute_score + if(ua_count>10, 5, 0)
+
+`comment("Password spraying - many endpoints targeted")`
+| eval brute_score=brute_score + if(targeted_endpoints>2, 3, 0)
+
+| where brute_score >= 5
+| eval duration_secs=last_seen - first_seen
+| eval attempts_per_sec=round(failed_attempts / max(duration_secs, 1), 2)
+
+| eval severity=case(
+    failed_attempts>=50 OR ua_count>10, "CRITICAL",
+    failed_attempts>=15 OR ua_count>5,  "HIGH",
+    true(), "MEDIUM")
+
+| eval attack_type=case(
+    ua_count>5 AND failed_attempts>=20, "Credential Stuffing (Distributed)",
+    targeted_endpoints>3,               "Password Spraying",
+    failed_attempts>=50,                "High-Volume Brute Force",
+    true(),                             "Brute Force Login Attack")
+
+| eval mitre_id="T1110"
+| eval owasp="A07:2021 - Identification and Authentication Failures"
+| sort -failed_attempts
+| table _time, final_ip, failed_attempts, ua_count, targeted_endpoints, attempts_per_sec, brute_score, severity, attack_type, mitre_id, owasp

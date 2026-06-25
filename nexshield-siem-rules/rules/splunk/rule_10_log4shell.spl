@@ -1,0 +1,42 @@
+`nexshield_base`
+| eval check_all=lower(raw_log)
+| eval log4j_score=0
+
+`comment("Core JNDI pattern - all protocols")`
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{jndi\s*:"), 10, 0)
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{jndi:(ldap|rmi|dns|iiop|ldaps|corba|nds|nis)s?:\/\/"), 10, 0)
+
+`comment("URL-encoded variants: %24%7b = ${ and %7d = }")`
+| eval log4j_score=log4j_score + if(match(check_all, "%24%7bjndi%3a|%7bjndi|%2524%257bjndi|%2524%257b"), 10, 0)
+
+`comment("Obfuscation via lower/upper lookup functions")`
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{lower:j\}|\$\{upper:j\}|\$\{::-j\}|\$\{::-J\}"), 9, 0)
+
+`comment("Nested lookup obfuscation e.g. ${${lower:j}ndi:...}")`
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{(lower|upper|env|sys|main|marker|mdc|ndc|ctx|sd|web|k8s|spring|log4j):.*jndi"), 9, 0)
+
+`comment("Triple nesting - most obfuscated bypasses")`
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{.*\$\{.*\$\{"), 9, 0)
+
+`comment("JNDI DNS exfil pattern")`
+| eval log4j_score=log4j_score + if(match(check_all, "jndi.*ldap.*\/\/.*\.[a-z]{2,6}(:[0-9]+)?\/|jndi.*dns.*\/\/"), 9, 0)
+
+`comment("Header injection vectors - attackers inject via User-Agent, X-Forwarded-For etc")`
+| eval log4j_score=log4j_score + if(match(check_all, "\$\{[^}]{0,50}jndi[^}]{0,50}\}"), 10, 0)
+
+`comment("Base64 in JNDI payload")`
+| eval log4j_score=log4j_score + if(match(check_all, "jndi:ldap.*base64|jndi.*\$\{base64"), 8, 0)
+
+| where log4j_score >= 5
+| stats
+    max(log4j_score)      as risk_score
+    count                 as attempt_count
+    values(raw_log)       as raw_payloads
+    values(http_status)   as responses
+    by final_ip, _time
+| eval severity="CRITICAL"
+| eval attack_type="Log4Shell Exploitation (CVE-2021-44228)"
+| eval mitre_id="T1190"
+| eval owasp="A06:2021 - Vulnerable and Outdated Components"
+| sort -risk_score
+| table final_ip, attempt_count, raw_payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

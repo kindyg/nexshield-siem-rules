@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-011",
+  "name": "Server-Side Request Forgery (SSRF) Detection",
+  "spl_file": "rule_11_ssrf.spl",
+  "description": "Detects SSRF targeting AWS/Azure/GCP cloud metadata, localhost bypass tricks (hex/octal/decimal IP), private ranges, dangerous protocols, PHP wrappers, open redirect chaining, double-encoded bypasses",
+  "severity": "CRITICAL",
+  "mitre_id": "T1190",
+  "owasp": "A10:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

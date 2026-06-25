@@ -1,0 +1,45 @@
+`nexshield_base`
+| bucket _time span=1m
+| stats
+    count as req_count
+    dc(final_endpoint) as unique_endpoints
+    dc(final_ua)       as unique_uas
+    dc(http_status)    as status_variety
+    values(http_status) as status_codes
+    by final_ip, _time
+
+| eval ddos_score=0
+
+`comment("Volumetric thresholds")`
+| eval ddos_score=ddos_score + if(req_count>=100,  5, 0)
+| eval ddos_score=ddos_score + if(req_count>=500,  5, 0)
+| eval ddos_score=ddos_score + if(req_count>=1000, 5, 0)
+
+`comment("HTTP Flood: same endpoint hammered repeatedly")`
+| eval ddos_score=ddos_score + if(unique_endpoints<=2 AND req_count>=50, 5, 0)
+
+`comment("Botnet pattern: single UA, massive volume")`
+| eval ddos_score=ddos_score + if(unique_uas<=2 AND req_count>=200, 4, 0)
+
+`comment("Distributed: many different UAs same IP = proxy rotation")`
+| eval ddos_score=ddos_score + if(unique_uas>=10 AND req_count>=100, 4, 0)
+
+| where ddos_score >= 5
+
+| eval attack_type=case(
+    unique_endpoints<=2 AND req_count>=200, "HTTP Flood DDoS - Single Endpoint",
+    unique_uas<=2       AND req_count>=500, "Botnet DDoS - Single User Agent",
+    unique_uas>=10      AND req_count>=100, "Distributed DDoS - Proxy Rotation",
+    req_count>=1000,                        "Volumetric DDoS Attack",
+    true(),                                 "Suspicious High-Volume Traffic")
+
+| eval severity=case(
+    req_count>=1000, "CRITICAL",
+    req_count>=500,  "CRITICAL",
+    req_count>=100,  "HIGH",
+    true(),          "MEDIUM")
+
+| eval mitre_id="T1498"
+| eval owasp="A06:2021 - Vulnerable and Outdated Components"
+| sort -req_count
+| table _time, final_ip, req_count, unique_endpoints, unique_uas, ddos_score, severity, attack_type, mitre_id, owasp

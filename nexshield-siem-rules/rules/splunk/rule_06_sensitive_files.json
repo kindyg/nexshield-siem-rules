@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-006",
+  "name": "Sensitive File Access Attempt",
+  "spl_file": "rule_06_sensitive_files.spl",
+  "description": "Detects access attempts to .env, SSH keys, .git credentials, PHP configs, Docker files, cloud metadata endpoints - tiered scoring with scan behavior detection",
+  "severity": "HIGH",
+  "mitre_id": "T1083",
+  "owasp": "A05:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

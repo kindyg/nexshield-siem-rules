@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-014",
+  "name": "Mail Server Attack Detection",
+  "spl_file": "rule_14_mail_attack.spl",
+  "description": "Detects mail brute force, credential stuffing, password spraying, open relay exploitation, spam campaigns, mail harvesting - with internal IP exclusion to reduce false positives",
+  "severity": "HIGH",
+  "mitre_id": "T1110.001",
+  "owasp": "A07:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

@@ -1,0 +1,51 @@
+`nexshield_base`
+| eval uri_to_check=lower(coalesce(decoded_uri, request_uri, ""))
+| eval raw_lower=lower(raw_log)
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval xss_score=0
+
+`comment("Classic script tag - encoded variants")`
+| eval xss_score=xss_score + if(match(uri_to_check, "<script[\s>\/]|<\/script>|%3cscript|%3c%2fscript|\\u003cscript|&#60;script|&#x3c;script"), 10, 0)
+
+`comment("Protocol handlers")`
+| eval xss_score=xss_score + if(match(uri_to_check, "javascript[\s]*:|vbscript[\s]*:|data[\s]*:text\/html|data[\s]*:application\/xhtml"), 9, 0)
+
+`comment("Event handler injection - comprehensive list")`
+| eval xss_score=xss_score + if(match(uri_to_check, "on(error|load|click|mouseover|mouseout|focus|blur|change|submit|reset|keyup|keydown|keypress|input|drag|drop|copy|cut|paste|wheel|scroll|resize|abort|canplay|ended|pause|play|seeked|volumechange|animationstart|animationend|transitionend|pointerdown|pointerup|pointermove)[\s]*="), 8, 0)
+
+`comment("JS execution functions")`
+| eval xss_score=xss_score + if(match(uri_to_check, "alert[\s]*\(|confirm[\s]*\(|prompt[\s]*\(|console\.log[\s]*\("), 7, 0)
+
+`comment("DOM manipulation")`
+| eval xss_score=xss_score + if(match(uri_to_check, "document\.cookie|document\.write|document\.location|window\.location|document\.domain|window\.open"), 8, 0)
+| eval xss_score=xss_score + if(match(uri_to_check, "innerhtml|outerhtml|insertadjacenthtml|srcdoc|textcontent"), 6, 0)
+
+`comment("Code execution")`
+| eval xss_score=xss_score + if(match(uri_to_check, "eval[\s]*\(|settimeout[\s]*\(|setinterval[\s]*\(|new[\s]+function[\s]*\("), 7, 0)
+
+`comment("HTML tags that can execute JS")`
+| eval xss_score=xss_score + if(match(uri_to_check, "<iframe|<svg[\s\/]|<img[\s]|<body[\s]|<object|<embed|<math|<video|<audio|<source|<link"), 5, 0)
+
+`comment("Encoding/obfuscation bypass")`
+| eval xss_score=xss_score + if(match(uri_to_check, "fromcharcode|charcodeat|btoa[\s]*\(|atob[\s]*\(|unescape[\s]*\(|decodeuri[\s]*\("), 6, 0)
+| eval xss_score=xss_score + if(match(uri_to_check, "\\\\u003c|\\\\u003e|\\\\u0022|\\\\u0027|\\\\x3c|\\\\x3e"), 7, 0)
+
+`comment("Attribute-based XSS via src")`
+| eval xss_score=xss_score + if(match(uri_to_check, "src[\s]*=[\s]*['\"][\s]*(http|\/\/|javascript|data:)"), 7, 0)
+
+`comment("Double-encoded check")`
+| eval xss_score=xss_score + if(match(double_decoded, "<script|javascript:|onerror=|onload=|alert\("), 10, 0)
+
+| where xss_score >= 5
+| stats
+    max(xss_score) as risk_score
+    count as attempt_count
+    values(uri_to_check) as payloads
+    values(http_status) as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type="Cross-Site Scripting (XSS)"
+| eval mitre_id="T1189"
+| eval owasp="A03:2021 - Injection"
+| sort -risk_score
+| table final_ip, attempt_count, payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

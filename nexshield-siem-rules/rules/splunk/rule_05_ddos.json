@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-005",
+  "name": "DDoS Attack Detection",
+  "spl_file": "rule_05_ddos.spl",
+  "description": "Detects volumetric DDoS, HTTP flood on single endpoints, botnet DDoS with single UA, and distributed attacks with proxy rotation",
+  "severity": "CRITICAL",
+  "mitre_id": "T1498",
+  "owasp": "A06:2021",
+  "cron": "*/1 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 60
+}

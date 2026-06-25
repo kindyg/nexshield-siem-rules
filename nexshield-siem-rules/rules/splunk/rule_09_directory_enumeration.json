@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-009",
+  "name": "Directory and Endpoint Enumeration",
+  "spl_file": "rule_09_directory_enumeration.spl",
+  "description": "Detects directory brute forcing using 404/403 patterns, wordlist path matching, UA rotation detection for distributed scans, scoring based on volume and wordlist hits",
+  "severity": "MEDIUM",
+  "mitre_id": "T1595.003",
+  "owasp": "A05:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

@@ -1,0 +1,51 @@
+`nexshield_base`
+| eval uri_to_check=lower(coalesce(decoded_uri, request_uri, ""))
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval traversal_score=0
+
+`comment("Classic ../ and ..\\ - single encoded")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\.\.[\/\\]"), 8, 0)
+
+`comment("URL-encoded: %2e%2e%2f and %2e%2e%5c")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "%2e%2e[%2f%5c]|%2e%2e\/|%2e%2e\\"), 9, 0)
+
+`comment("Double-decoded traversal - catches double encoding")`
+| eval traversal_score=traversal_score + if(match(double_decoded, "\.\.[\/\\]"), 10, 0)
+
+`comment("Double URL encoded: %252e%252e (attacker encodes the % itself)")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "%252e%252e|%25%32%65|%c0%af|%c1%9c|%e0%80%af|%ef%bc%8f"), 10, 0)
+
+`comment("Dot-encoded variants: ..%2f, ..%5c, %2f.., %5c..")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\.\.%2f|\.\.%5c|%2f\.\.|%5c\.\."), 9, 0)
+
+`comment("Linux sensitive files")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\/etc\/passwd|\/etc\/shadow|\/etc\/hosts|\/etc\/sudoers|\/etc\/crontab|\/etc\/ssh\/|\/proc\/self|\/proc\/version|\/proc\/cmdline"), 10, 0)
+
+`comment("Windows sensitive files")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\/windows\/system32|\/winnt\/system32|boot\.ini|win\.ini|system\.ini|\/windows\/win\.ini"), 10, 0)
+
+`comment("SSH and credentials")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\/home\/\w+\/\.ssh|\.bash_history|\.bash_profile|\.bashrc|\.profile|id_rsa|authorized_keys"), 8, 0)
+
+`comment("Null byte injection - bypasses extension filters")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "%00|%2500|\x00|\.php%00|\.asp%00"), 7, 0)
+
+`comment("Chained traversal sequences")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\.\.\/.\.\.\/|\.\.\/\.\.\/|%2e%2e%2f%2e%2e%2f"), 9, 0)
+
+`comment("Unicode tricks: ../ via unicode fullwidth")`
+| eval traversal_score=traversal_score + if(match(uri_to_check, "%u002e%u002e|%u2215|%u2216|%uef%ubf%ubd"), 9, 0)
+
+| where traversal_score >= 5
+| stats
+    max(traversal_score) as risk_score
+    count as attempt_count
+    values(uri_to_check) as payloads
+    values(http_status) as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type="Path Traversal"
+| eval mitre_id="T1083"
+| eval owasp="A01:2021 - Broken Access Control"
+| sort -risk_score
+| table final_ip, attempt_count, payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

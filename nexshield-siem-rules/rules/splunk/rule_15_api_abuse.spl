@@ -1,0 +1,69 @@
+index=web_logs
+| where isnotnull(ip) AND isnotnull(endpoint)
+
+`comment("Exclude health check endpoints - reduce false positives")`
+| where NOT match(endpoint, "^(\/(health|ping|status|metrics|favicon\.ico|robots\.txt))$")
+
+| eval is_auth_fail    = if(status_code=401, 1, 0)
+| eval is_forbidden    = if(status_code=403, 1, 0)
+| eval is_rate_limited = if(status_code=429, 1, 0)
+| eval is_error        = if(status_code>=400 AND status_code<600, 1, 0)
+| eval is_success      = if(status_code>=200 AND status_code<300, 1, 0)
+
+| bucket _time span=1m
+| stats
+    count                       as req_count
+    dc(endpoint)                as unique_endpoints
+    values(endpoint)            as endpoints
+    sum(is_auth_fail)           as unauthorized_count
+    sum(is_forbidden)           as forbidden_count
+    sum(is_rate_limited)        as rate_limited_count
+    sum(is_error)               as error_count
+    sum(is_success)             as success_count
+    dc(status_code)             as status_variety
+    by ip, _time
+
+| eval api_score=0
+
+`comment("Volume-based detection")`
+| eval api_score=api_score + if(req_count>=30,  5, 0)
+| eval api_score=api_score + if(req_count>=100, 5, 0)
+| eval api_score=api_score + if(req_count>=500, 5, 0)
+
+`comment("Auth abuse - token brute force")`
+| eval api_score=api_score + if(unauthorized_count>=5,  5, 0)
+| eval api_score=api_score + if(unauthorized_count>=20, 5, 0)
+
+`comment("Access control probing")`
+| eval api_score=api_score + if(forbidden_count>=5, 4, 0)
+
+`comment("Already being rate limited")`
+| eval api_score=api_score + if(rate_limited_count>=3, 5, 0)
+
+`comment("Scraping: many endpoints, high success rate")`
+| eval api_score=api_score + if(unique_endpoints>=5 AND success_count>=20, 4, 0)
+
+`comment("High error ratio - scanning/fuzzing")`
+| eval error_ratio=round(error_count / max(req_count, 1), 2)
+| eval api_score=api_score + if(error_ratio>=0.7 AND req_count>=20, 4, 0)
+
+| where api_score >= 5
+
+| eval attack_type=case(
+    rate_limited_count>=3                               , "API Rate Limit Evasion Attempt",
+    unauthorized_count>=20                              , "API Token Brute Force / Exhaustion",
+    req_count>=100 AND unique_endpoints<=2              , "API Endpoint Flooding (DDoS)",
+    unique_endpoints>=5 AND success_count>=20           , "API Data Scraping",
+    error_ratio>=0.7 AND req_count>=20                  , "API Fuzzing / Parameter Tampering",
+    forbidden_count>=10                                 , "API Privilege Escalation Probing",
+    true()                                              , "Suspicious API Abuse")
+
+| eval severity=case(
+    req_count>=500 OR unauthorized_count>=50    , "CRITICAL",
+    req_count>=100 OR unauthorized_count>=20    , "HIGH",
+    true()                                      , "MEDIUM")
+
+| eval mitre_id="T1499"
+| eval owasp="A04:2021 - Insecure Design"
+| sort -api_score
+| table _time, ip, req_count, unique_endpoints, unauthorized_count, forbidden_count, rate_limited_count, error_ratio, api_score, severity, attack_type, mitre_id, owasp

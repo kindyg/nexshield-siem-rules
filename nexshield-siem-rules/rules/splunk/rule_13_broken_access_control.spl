@@ -1,0 +1,52 @@
+`nexshield_base`
+| eval uri_check=lower(coalesce(decoded_uri, request_uri, final_endpoint, ""))
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval http_code=coalesce(http_status, tostring(status_code))
+| eval bac_score=0
+
+`comment("Admin path probing")`
+| eval bac_score=bac_score + if(match(uri_check, "\/(admin|administrator|superuser|root|sudo|privileged|management|console|backoffice|siteadmin|controlpanel|cpanel|admincp|moderator|staff|manager|internal|restricted|secure|protected)([\/\?#]|$)"), 5, 0)
+
+`comment("API admin endpoint probing")`
+| eval bac_score=bac_score + if(match(uri_check, "\/api\/(v[0-9]+\/)?(admin|users|settings|config|system|audit|logs|export|import|backup|roles|permissions|tokens|secrets|keys)([\/\?#]|$)"), 6, 0)
+
+`comment("Privilege escalation via parameter tampering")`
+| eval bac_score=bac_score + if(match(uri_check, "role=admin|role=superuser|role=root|isadmin=true|is_admin=1|admin=true|admin=1|privilege=admin|access=full|level=9|permission=all"), 9, 0)
+
+`comment("IDOR - manipulating object IDs to access others data")`
+| eval bac_score=bac_score + if(match(uri_check, "\/(user|account|profile|order|invoice|document|file|record|customer)s?\/\d+"), 3, 0)
+
+`comment("JWT manipulation indicators")`
+| eval bac_score=bac_score + if(match(uri_check, "alg=none|\"alg\":\"none\"|\"alg\":\"hs256\""), 9, 0)
+
+`comment("403 forbidden repeated - access control bypass attempts")`
+| eval bac_score=bac_score + if(http_code="403", 3, 0)
+
+`comment("Method override tricks")`
+| eval bac_score=bac_score + if(match(raw_log, "(?i)(x-http-method-override|x-method-override|_method):\s*(DELETE|PUT|PATCH|OPTIONS)"), 6, 0)
+
+`comment("Double-encoded bypass")`
+| eval bac_score=bac_score + if(match(double_decoded, "\/(admin|administrator|superuser|management|console)"), 8, 0)
+
+| where bac_score >= 5
+| bucket _time span=10m
+| stats
+    max(bac_score)            as risk_score
+    count                     as attempt_count
+    values(uri_check)         as attempted_paths
+    values(http_code)         as responses
+    dc(uri_check)             as unique_paths
+    by final_ip, _time
+
+| where attempt_count >= 2 OR risk_score >= 8
+
+| eval severity=case(risk_score>=9, "CRITICAL", risk_score>=6, "HIGH", true(), "MEDIUM")
+| eval attack_type=case(
+    match(mvjoin(attempted_paths," "), "role=admin|isadmin=true|privilege=admin"), "Privilege Escalation via Parameter Tampering",
+    match(mvjoin(attempted_paths," "), "alg=none"), "JWT Algorithm Bypass",
+    unique_paths>=10, "Admin Panel Brute Force",
+    true(), "Broken Access Control Attempt")
+| eval mitre_id="T1078"
+| eval owasp="A01:2021 - Broken Access Control"
+| sort -risk_score
+| table _time, final_ip, attempt_count, unique_paths, attempted_paths, responses, risk_score, severity, attack_type, mitre_id, owasp

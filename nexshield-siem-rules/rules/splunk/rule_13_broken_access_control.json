@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-013",
+  "name": "Broken Access Control Detection",
+  "spl_file": "rule_13_broken_access_control.spl",
+  "description": "Detects broken access control including IDOR, admin path brute forcing, privilege escalation via parameter tampering, JWT algorithm bypass (alg:none), HTTP method override tricks",
+  "severity": "HIGH",
+  "mitre_id": "T1078",
+  "owasp": "A01:2021",
+  "cron": "*/5 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 300
+}

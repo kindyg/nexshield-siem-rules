@@ -1,0 +1,13 @@
+{
+  "id": "NEXSHIELD-015",
+  "name": "API Abuse and Endpoint Flooding Detection",
+  "spl_file": "rule_15_api_abuse.spl",
+  "description": "Detects API token brute force, endpoint flooding, data scraping, fuzzing via error ratio, rate limit evasion, privilege escalation probing - with health endpoint exclusion",
+  "severity": "HIGH",
+  "mitre_id": "T1499",
+  "owasp": "A04:2021",
+  "cron": "*/1 * * * *",
+  "alert_threshold": 1,
+  "alert_comparator": "greater than",
+  "suppress_period": 60
+}

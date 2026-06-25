@@ -1,0 +1,61 @@
+`nexshield_base`
+| eval uri_to_check=lower(coalesce(decoded_uri, request_uri, final_endpoint, ""))
+| eval raw_lower=lower(raw_log)
+| eval double_decoded=lower(urldecode(urldecode(coalesce(request_uri, ""))))
+| eval sqli_score=0
+
+`comment("Union-based SQLi - covers whitespace evasion with +, %09, comments")`
+| eval sqli_score=sqli_score + if(match(uri_to_check,  "union[\s\+%09%0a%0d\/\*]+select"), 10, 0)
+| eval sqli_score=sqli_score + if(match(double_decoded, "union[\s\+]+select"), 10, 0)
+
+`comment("SELECT FROM - covers tab/newline evasion")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "select[\s\+%09]+.{0,50}from[\s\+%09]+"), 8, 0)
+
+`comment("DDL attacks")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "(drop|alter|truncate|create)[\s\+%09]+table"), 10, 0)
+
+`comment("Boolean-based blind: OR 1=1, AND 1=1, OR 'a'='a'")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "(\bor\b|\band\b)[\s\+]+[\'\"]?\d+[\'\"]?[\s\+]*=[\s\+]*[\'\"]?\d+"), 9, 0)
+| eval sqli_score=sqli_score + if(match(uri_to_check, "(\bor\b|\band\b)[\s\+]+[\'\"]\w+[\'\"][\s\+]*=[\s\+]*[\'\"]\w+"), 9, 0)
+
+`comment("Time-based blind")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "sleep[\s\+]*\([\s\+]*\d+"), 8, 0)
+| eval sqli_score=sqli_score + if(match(uri_to_check, "benchmark[\s\+]*\("), 8, 0)
+| eval sqli_score=sqli_score + if(match(uri_to_check, "waitfor[\s\+]+delay"), 8, 0)
+| eval sqli_score=sqli_score + if(match(uri_to_check, "pg_sleep[\s\+]*\("), 8, 0)
+
+`comment("MSSQL RCE")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "xp_cmdshell|xp_exec|exec[\s\+]*\("), 10, 0)
+
+`comment("Schema discovery")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "information_schema|sys\.tables|sysobjects|sqlite_master"), 7, 0)
+
+`comment("Encoding and hex tricks")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "0x[0-9a-f]{4,}|char[\s\+]*\([\s\+]*\d+"), 5, 0)
+| eval sqli_score=sqli_score + if(match(uri_to_check, "0x[0-9a-f]{4,}|char[\s\+]*\([\s\+]*\d+"), 5, 0)
+
+`comment("Comment-based evasion")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "--[\s\+]|#[\s\+]|\/\*[\s\S]*\*\/|%23|%2d%2d"), 4, 0)
+
+`comment("File read/write")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "load_file[\s\+]*\(|into[\s\+]+outfile|into[\s\+]+dumpfile"), 9, 0)
+
+`comment("URL-encoded quote characters")`
+| eval sqli_score=sqli_score + if(match(uri_to_check, "%27|%22|%3d|%60"), 2, 0)
+
+`comment("Double-encoded checks")`
+| eval sqli_score=sqli_score + if(match(double_decoded, "union.*select|sleep\(|drop\s+table|xp_cmdshell"), 10, 0)
+
+| where sqli_score >= 5
+| stats
+    max(sqli_score) as risk_score
+    count as attempt_count
+    values(uri_to_check) as payloads
+    values(http_status) as responses
+    by final_ip, _time
+| eval severity=case(risk_score>=10, "CRITICAL", risk_score>=7, "HIGH", true(), "MEDIUM")
+| eval attack_type="SQL Injection"
+| eval mitre_id="T1190"
+| eval owasp="A03:2021 - Injection"
+| sort -risk_score
+| table final_ip, attempt_count, payloads, responses, risk_score, severity, attack_type, mitre_id, owasp

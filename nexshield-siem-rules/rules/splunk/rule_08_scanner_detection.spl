@@ -1,0 +1,56 @@
+`nexshield_base`
+| eval ua_lower=lower(coalesce(final_ua, ""))
+| eval uri_lower=lower(coalesce(decoded_uri, request_uri, ""))
+| eval scanner_score=0
+| eval scanner_name="Unknown"
+
+`comment("Known web vulnerability scanners")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "sqlmap|nikto|nessus|acunetix|openvas|w3af|burpsuite|burp suite|owasp|zaproxy|zap/"), 10, 0)
+| eval scanner_name=case(match(ua_lower,"sqlmap"),"SQLMap", match(ua_lower,"nikto"),"Nikto", match(ua_lower,"nessus"),"Nessus", match(ua_lower,"acunetix"),"Acunetix", match(ua_lower,"burp"),"Burp Suite", match(ua_lower,"zap"),"OWASP ZAP", true(), scanner_name)
+
+`comment("Directory brute force tools")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "dirbuster|gobuster|wfuzz|ffuf|feroxbuster|dirb|dirsearch|rustbuster|kiterunner"), 9, 0)
+| eval scanner_name=case(match(ua_lower,"gobuster"),"GoBuster", match(ua_lower,"ffuf"),"FFUF", match(ua_lower,"feroxbuster"),"Feroxbuster", match(ua_lower,"wfuzz"),"WFuzz", true(), scanner_name)
+
+`comment("Credential brute force tools")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "hydra|medusa|patator|crowbar|thc-hydra|brutex|ncrack"), 10, 0)
+
+`comment("Exploitation frameworks")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "metasploit|msfconsole|msf exploit|meterpreter|empire|covenant|sliver|cobalt strike"), 10, 0)
+
+`comment("Specialized attack tools")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "nuclei|dalfox|commix|xsser|wapiti|skipfish|arachni|whatweb|wafw00f"), 9, 0)
+
+`comment("Recon and OSINT tools")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "shodan|censys|zoomeye|fofa|binaryedge|hunter\.io|ivre|masscan|zgrab|zmap|amass|subfinder|dnsx|httpx"), 8, 0)
+
+`comment("Generic script/bot indicators")`
+| eval scanner_score=scanner_score + if(match(ua_lower, "python-requests\/|go-http-client\/|libwww-perl\/|lwp-trivial|java\/\d|zgrab|masscan"), 4, 0)
+
+`comment("Suspicious minimal or empty UA")`
+| eval scanner_score=scanner_score + if(len(ua_lower)<5 OR ua_lower="" OR ua_lower="-", 4, 0)
+| eval scanner_score=scanner_score + if(match(ua_lower, "^-$|^null$|^none$|^test$|^scanner$|^bot$|^probe$|^check$"), 5, 0)
+
+`comment("Behavioral: scanning patterns in URI regardless of UA (UA spoofing bypass)")`
+| eval scanner_score=scanner_score + if(match(uri_lower, "\/(\.well-known\/security|actuator\/|\.git\/|phpinfo\.php|server-status|elmah\.axd|trace\.axd|wp-login\.php|phpmyadmin\/|adminer\.php)"), 3, 0)
+
+| where scanner_score >= 4
+| bucket _time span=10m
+| stats
+    max(scanner_score)          as risk_score
+    count                       as req_count
+    values(final_endpoint)      as scanned_paths
+    values(final_ua)            as user_agents
+    dc(final_endpoint)          as unique_paths
+    values(scanner_name)        as tools_detected
+    by final_ip, _time
+
+`comment("Add bonus for heavy scanning behavior")`
+| eval final_score=risk_score + case(unique_paths>=50, 10, unique_paths>=20, 5, unique_paths>=10, 3, true(), 0)
+
+| eval severity=case(final_score>=15, "CRITICAL", final_score>=10, "HIGH", true(), "MEDIUM")
+| eval attack_type="Security Scanner / Automated Reconnaissance"
+| eval mitre_id="T1595"
+| eval owasp="A05:2021 - Security Misconfiguration"
+| sort -final_score
+| table _time, final_ip, req_count, unique_paths, tools_detected, user_agents, final_score, severity, attack_type, mitre_id, owasp
