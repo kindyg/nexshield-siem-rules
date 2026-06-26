@@ -26,7 +26,7 @@ SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "lifeis100%Beautiful")
 GITHUB_REPO     = "kindyg/nexshield-siem-rules"
 GITHUB_BRANCH   = "main"
 RULES_PATH      = "nexshield-siem-rules/rules/splunk"
-GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "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")  # Optional: for private repos
+GITHUB_TOKEN    = "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"  # Optional: for private repos
 
 SPLUNK_APP      = "search"         # App to create saved searches in
 TELEGRAM_WEBHOOK = os.environ.get("TELEGRAM_WEBHOOK", "")  # Optional alert webhook
