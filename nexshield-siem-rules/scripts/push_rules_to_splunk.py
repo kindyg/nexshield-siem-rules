@@ -10,13 +10,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 SPLUNK_HOST     = "splunk.nexshield.store"
 SPLUNK_PORT     = 8089
-SPLUNK_USER     = "imhanrimteam"
-SPLUNK_PASSWORD = "lifeis100%Beautiful"
+SPLUNK_USER     = "user"
+SPLUNK_PASSWORD = "your_password"
 
 GITHUB_REPO     = "kindyg/nexshield-siem-rules"
 GITHUB_BRANCH   = "main"
 RULES_PATH      = "nexshield-siem-rules/rules/splunk"
-GITHUB_TOKEN    = "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"
+GITHUB_TOKEN    = "your_token"
 
 SPLUNK_APP      = "search"
 # ─────────────────────────────────────────────────────────────────────────────
