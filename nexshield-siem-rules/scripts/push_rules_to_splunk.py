@@ -26,7 +26,7 @@ SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "lifeis100%Beautiful")
 GITHUB_REPO     = "kindyg/nexshield-siem-rules"
 GITHUB_BRANCH   = "main"
 RULES_PATH      = "nexshield-siem-rules/rules/splunk"
-GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "")  # Optional: for private repos
+GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "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")  # Optional: for private repos
 
 SPLUNK_APP      = "search"         # App to create saved searches in
 TELEGRAM_WEBHOOK = os.environ.get("TELEGRAM_WEBHOOK", "")  # Optional alert webhook
@@ -133,23 +133,24 @@ def push_macro_to_splunk(macro_spl):
     auth = (SPLUNK_USER, SPLUNK_PASSWORD)
 
     payload = {
-        "name":       "nexshield_base",
         "definition": macro_spl.strip(),
-        "iseval":     "0",
+        "iseval": "0",
     }
 
-    check_url = f"{url}/nexshield_base"
-    check_resp = requests.get(check_url, auth=auth, verify=False, timeout=10)
-
-    if check_resp.status_code == 200:
-        resp = requests.post(check_url, data=payload, auth=auth, verify=False, timeout=15)
-        action = "UPDATED"
-    else:
-        resp = requests.post(url, data=payload, auth=auth, verify=False, timeout=15)
-        action = "CREATED"
+    # Try update first since macro likely already exists
+    update_url = f"{url}/nexshield_base"
+    resp = requests.post(update_url, data=payload, auth=auth, verify=False, timeout=15)
 
     if resp.status_code in (200, 201):
-        print(f"  [✓] MACRO {action}: nexshield_base")
+        print(f"  [✓] MACRO UPDATED: nexshield_base")
+        return True
+
+    # If update failed, try create
+    create_payload = {"name": "nexshield_base", **payload}
+    resp = requests.post(url, data=create_payload, auth=auth, verify=False, timeout=15)
+
+    if resp.status_code in (200, 201):
+        print(f"  [✓] MACRO CREATED: nexshield_base")
         return True
     else:
         print(f"  [✗] MACRO FAILED ({resp.status_code}): {resp.text[:200]}")
