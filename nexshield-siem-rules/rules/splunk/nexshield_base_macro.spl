@@ -1,4 +1,4 @@
-index=web_logs
+index=web_logs sourcetype=docker_logs
 | spath log
 | eval raw_log=coalesce(log, _raw)
 | eval src_ip=coalesce(ip, mvindex(split(raw_log," "),0))
