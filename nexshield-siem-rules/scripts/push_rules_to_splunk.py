@@ -85,23 +85,29 @@ def push_to_splunk(meta, spl):
 
     # Try CREATE first
     create_payload = {"name": rule_name, **payload}
-    resp = requests.post(base_url, data=create_payload, auth=auth, verify=False, timeout=15)
-
-    if resp.status_code in (200, 201):
-        print(f"  [✓] CREATED: {rule_name}")
-        return True
-
+    # 1. Try to CREATE the rule
+    resp = requests.post(url, data=payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+    
+    # 2. If it already exists, UPDATE it instead
     if resp.status_code == 409:
-        # Already exists — UPDATE via POST to named endpoint
-        update_url = f"{base_url}/{quote(rule_name, safe='')}"
-        resp = requests.post(update_url, data=payload, auth=auth, verify=False, timeout=15)
-        if resp.status_code in (200, 201):
-            print(f"  [✓] UPDATED: {rule_name}")
-            return True
+        print(f"  [*] Rule already exists. Updating instead...")
+        from urllib.parse import quote
+        
+        # Splunk requires the rule name to be URL-encoded in the endpoint path
+        update_url = f"{url}/{quote(rule_name, safe='')}"
+        
+        # Remove the 'name' parameter for the update payload
+        update_payload = payload.copy()
+        if 'name' in update_payload:
+            del update_payload['name']
+            
+        resp = requests.post(update_url, data=update_payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
 
-    print(f"  [✗] FAILED ({resp.status_code}): {rule_name}")
-    print(f"      {resp.text[:200]}")
-    return False
+    # 3. Check final success
+    if resp.status_code in [200, 201]:
+        print(f"  [+] Rule '{rule_name}' successfully created/updated.")
+    else:
+        print(f"  [✗] RULE FAILED ({resp.status_code}): {resp.text}")
 
 
 def push_macro_to_splunk(macro_spl):
@@ -111,21 +117,26 @@ def push_macro_to_splunk(macro_spl):
     payload = {"definition": macro_spl.strip(), "iseval": "0"}
 
     # Try CREATE first
-    resp = requests.post(base_url, data={"name": "nexshield_base", **payload}, auth=auth, verify=False, timeout=15)
-    if resp.status_code in (200, 201):
-        print(f"  [✓] MACRO CREATED: nexshield_base")
-        return True
-
+    # 1. Try to CREATE the macro
+    resp = requests.post(url, data=payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+    
+    # 2. If it already exists, UPDATE it instead
     if resp.status_code == 409:
-        # Already exists — UPDATE
-        update_url = f"{base_url}/nexshield_base"
-        resp = requests.post(update_url, data=payload, auth=auth, verify=False, timeout=15)
-        if resp.status_code in (200, 201):
-            print(f"  [✓] MACRO UPDATED: nexshield_base")
-            return True
-
-    print(f"  [✗] MACRO FAILED ({resp.status_code}): {resp.text[:200]}")
-    return False
+        print(f"  [*] Macro already exists. Updating instead...")
+        update_url = f"{url}/{macro_name}"
+        
+        # Remove the 'name' parameter for the update payload
+        update_payload = payload.copy()
+        if 'name' in update_payload:
+            del update_payload['name']
+            
+        resp = requests.post(update_url, data=update_payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+        
+    # 3. Check final success
+    if resp.status_code in [200, 201]:
+        print("  [+] Macro successfully created/updated.")
+    else:
+        print(f"  [✗] MACRO FAILED ({resp.status_code}): {resp.text}")
 
 
 def test_splunk_connection():
