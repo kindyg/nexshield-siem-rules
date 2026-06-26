@@ -16,7 +16,7 @@ SPLUNK_PASSWORD = "lifeis100%Beautiful"
 GITHUB_REPO     = "kindyg/nexshield-siem-rules"
 GITHUB_BRANCH   = "main"
 RULES_PATH      = "nexshield-siem-rules/rules/splunk"
-GITHUB_TOKEN    = "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"
+GITHUB_TOKEN    = "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"
 
 SPLUNK_APP      = "search"
 # ─────────────────────────────────────────────────────────────────────────────
