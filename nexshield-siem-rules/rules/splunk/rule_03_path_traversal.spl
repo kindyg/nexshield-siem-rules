@@ -4,10 +4,10 @@
 | eval traversal_score=0
 
 `comment("Classic ../ and ..\\ - single encoded")`
-| eval traversal_score=traversal_score + if(match(uri_to_check, "\.\.[\/\\]"), 8, 0)
+| eval traversal_score=traversal_score + if(match(uri_to_check, "\.\.[\/\\\\]"), 8, 0)
 
 `comment("URL-encoded: %2e%2e%2f and %2e%2e%5c")`
-| eval traversal_score=traversal_score + if(match(uri_to_check, "%2e%2e[%2f%5c]|%2e%2e\/|%2e%2e\\"), 9, 0)
+| eval traversal_score=traversal_score + if(match(uri_to_check, "%2e%2e[%2f%5c]|%2e%2e\/|%2e%2e\\\\"), 9, 0)
 
 `comment("Double-decoded traversal - catches double encoding")`
 | eval traversal_score=traversal_score + if(match(double_decoded, "\.\.[\/\\]"), 10, 0)
