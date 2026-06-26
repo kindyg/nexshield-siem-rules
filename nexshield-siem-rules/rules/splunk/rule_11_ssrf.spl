@@ -25,7 +25,7 @@
 | eval ssrf_score=ssrf_score + if(match(uri_to_check, "php:\/\/input|php:\/\/filter|zip:\/\/|phar:\/\/|expect:\/\/|data:\/\/"), 8, 0)
 
 `comment("Open redirect params that can lead to SSRF")`
-| eval ssrf_score=ssrf_score + if(match(uri_to_check, "[?&](url|redirect|next|target|dest|go|return|returnto|redir|location|forward|callback|host|proxy|fetch|image|load|img|src)=https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)", ), 9, 0)
+| eval ssrf_score=ssrf_score + if(match(uri_to_check, "[?&](url|redirect|next|target|dest|go|return|returnto|redir|location|forward|callback|host|proxy|fetch|image|load|img|src)=https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)"), 9, 0)
 
 `comment("AWS/cloud credential theft")`
 | eval ssrf_score=ssrf_score + if(match(uri_to_check, "aws_access_key|aws_secret|x-amz-security-token|x-amz-credential|iam\/security-credentials"), 10, 0)
