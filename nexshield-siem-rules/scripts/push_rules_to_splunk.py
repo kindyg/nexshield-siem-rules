@@ -20,12 +20,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 SPLUNK_HOST     = "splunk.nexshield.store"
 SPLUNK_PORT     = 8089                          # Splunk REST API port (not 8000)
-SPLUNK_USER     = "admin"
-SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "YOUR_SPLUNK_PASSWORD_HERE")
+SPLUNK_USER     = "imhanrimteam"
+SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "lifeis100%Beautiful")
 
-GITHUB_REPO     = "YOUR_GITHUB_USERNAME/nexshield-siem-rules"
+GITHUB_REPO     = "kindyg/nexshield-siem-rules"
 GITHUB_BRANCH   = "main"
-RULES_PATH      = "rules/splunk"
+RULES_PATH      = "nexshield-siem-rules/rules/splunk"
 GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "")  # Optional: for private repos
 
 SPLUNK_APP      = "search"         # App to create saved searches in
