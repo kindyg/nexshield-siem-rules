@@ -5,7 +5,7 @@
 | eval xss_score=0
 
 `comment("Classic script tag - encoded variants")`
-| eval xss_score=xss_score + if(match(uri_to_check, "<script[\s>\/]|<\/script>|%3cscript|%3c%2fscript|\\u003cscript|&#60;script|&#x3c;script"), 10, 0)
+| eval xss_score=xss_score + if(match(uri_to_check, "<script[\s>\/]|<\/script>|%3cscript|%3c%2fscript|\\\\u003cscript|&#60;script|&#x3c;script"), 10, 0)
 
 `comment("Protocol handlers")`
 | eval xss_score=xss_score + if(match(uri_to_check, "javascript[\s]*:|vbscript[\s]*:|data[\s]*:text\/html|data[\s]*:application\/xhtml"), 9, 0)
