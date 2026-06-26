@@ -75,47 +75,52 @@ def push_to_splunk(meta, spl):
     """Create or update a saved search in Splunk."""
     rule_name = f"{meta['id']} - {meta['name']}"
     url = f"{SPLUNK_BASE}/servicesNS/nobody/{SPLUNK_APP}/saved/searches"
+    auth = (SPLUNK_USER, SPLUNK_PASSWORD)
 
     payload = {
-        "name":           rule_name,
-        "search":         spl,
-        "description":    meta.get("description", ""),
-        "cron_schedule":  meta.get("cron", "*/5 * * * *"),
-        "is_scheduled":   "1",
-        "schedule_window":"auto",
-        "alert_type":     "number of events",
+        "search": spl,
+        "description": meta.get("description", ""),
+        "cron_schedule": meta.get("cron", "* * * * *"),
+        "is_scheduled": "1",
+        "schedule_window": "auto",
+        "alert_type": "number of events",
         "alert_comparator": meta.get("alert_comparator", "greater than"),
         "alert_threshold": str(meta.get("alert_threshold", 0)),
         "alert.severity": severity_to_int(meta.get("severity", "MEDIUM")),
         "alert.suppress": "1",
-        "alert.suppress.period": str(meta.get("suppress_period", 300)) + "s",
-        "dispatch.earliest_time": "-10m",
-        "dispatch.latest_time":   "now",
-        "actions":        "email" if not TELEGRAM_WEBHOOK else "",
-        "alert.track":    "1",
-        "counttype":      "number of events",
-        "relation":       "greater than",
-        "quantity":       str(meta.get("alert_threshold", 0)),
+        "alert.suppress.fields": "final_ip",
+        "alert.suppress.period": "60s",
+        "dispatch.earliest_time": "-5m",
+        "dispatch.latest_time": "now",
+        "actions": "script",
+        "alert.execute.cmd": "telegram_alert.sh",
+        "alert.track": "1",
+        "counttype": "number of events",
+        "relation": "greater than",
+        "quantity": str(meta.get("alert_threshold", 0)),
     }
 
-    auth = (SPLUNK_USER, SPLUNK_PASSWORD)
-
-    # Try to update existing first, then create new
-    check_url = f"{url}/{requests.utils.quote(rule_name)}"
-    check_resp = requests.get(check_url, auth=auth, verify=False, timeout=10)
-
-    if check_resp.status_code == 200:
-        # Rule exists — update it
-        resp = requests.post(check_url, data=payload, auth=auth, verify=False, timeout=15)
-        action = "UPDATED"
-    else:
-        # Rule doesn't exist — create it
-        resp = requests.post(url, data=payload, auth=auth, verify=False, timeout=15)
-        action = "CREATED"
+    # Try CREATE first
+    create_payload = {"name": rule_name, **payload}
+    resp = requests.post(url, data=create_payload, auth=auth, verify=False, timeout=15)
 
     if resp.status_code in (200, 201):
-        print(f"  [✓] {action}: {rule_name}")
+        print(f"  [✓] CREATED: {rule_name}")
         return True
+
+    elif resp.status_code == 409:
+        # Already exists — update it instead
+        from urllib.parse import quote
+        update_url = f"{url}/{quote(rule_name, safe='')}"
+        resp = requests.post(update_url, data=payload, auth=auth, verify=False, timeout=15)
+        if resp.status_code in (200, 201):
+            print(f"  [✓] UPDATED: {rule_name}")
+            return True
+        else:
+            print(f"  [✗] UPDATE FAILED ({resp.status_code}): {rule_name}")
+            print(f"      Response: {resp.text[:200]}")
+            return False
+
     else:
         print(f"  [✗] FAILED ({resp.status_code}): {rule_name}")
         print(f"      Response: {resp.text[:200]}")
