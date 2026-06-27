@@ -68,7 +68,7 @@ def push_to_splunk(meta, spl):
     payload = {
         "search":                   spl,
         "description":              meta.get("description", ""),
-        "cron_schedule":            meta.get("cron", "*/5 * * * *"),
+        "cron_schedule":            meta.get("cron", "* * * * *"),
         "is_scheduled":             "1",
         "schedule_window":          "auto",
         "alert_type":               "number of events",
@@ -79,14 +79,19 @@ def push_to_splunk(meta, spl):
         "alert.suppress.period":    "60s",
         "alert.suppress.fields":    "final_ip",
         "alert.track":              "1",
-        "dispatch.earliest_time":   "-10m",
+        "dispatch.earliest_time":   "-60m",
         "dispatch.latest_time":     "now",
+        # --- FIXED: Explicitly map the Telegram notification script ---
+        "actions":                  "script",
+        "action.script":            "1",
+        "action.script.filename":   "telegram_alert.sh"
     }
 
-    # Try CREATE first
+    # Try CREATE first (Requires 'create_payload' which contains the 'name' field)
     create_payload = {"name": rule_name, **payload}
-    # 1. Try to CREATE the rule
-    resp = requests.post(url, data=payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+    
+    # 1. Try to CREATE the rule (FIXED: changed 'url' to 'base_url' and 'payload' to 'create_payload')
+    resp = requests.post(base_url, data=create_payload, auth=auth, verify=False)
     
     # 2. If it already exists, UPDATE it instead
     if resp.status_code == 409:
@@ -94,38 +99,43 @@ def push_to_splunk(meta, spl):
         from urllib.parse import quote
         
         # Splunk requires the rule name to be URL-encoded in the endpoint path
-        update_url = f"{url}/{quote(rule_name, safe='')}"
+        # FIXED: changed 'url' to 'base_url'
+        update_url = f"{base_url}/{quote(rule_name, safe='')}"
         
         # Remove the 'name' parameter for the update payload
         update_payload = payload.copy()
         if 'name' in update_payload:
             del update_payload['name']
             
-        resp = requests.post(update_url, data=update_payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+        resp = requests.post(update_url, data=update_payload, auth=auth, verify=False)
 
-    # 3. Check final success
+    # 3. Check final success (FIXED: Explicitly returning True/False for the summary counter)
     if resp.status_code in [200, 201]:
         print(f"  [+] Rule '{rule_name}' successfully created/updated.")
+        return True
     else:
         print(f"  [✗] RULE FAILED ({resp.status_code}): {resp.text}")
+        return False
 
 
 def push_macro_to_splunk(macro_spl):
     base_url = f"{SPLUNK_BASE}/servicesNS/nobody/{SPLUNK_APP}/configs/conf-macros"
-    auth     = (SPLUNK_USER, SPLUNK_PASSWORD)
+    macro_name = "nexshield_base"
 
-    payload = {"definition": macro_spl.strip(), "iseval": "0"}
+    payload = {
+        "name": macro_name,
+        "definition": macro_spl.strip(), 
+        "iseval": "0"
+    }
 
-    # Try CREATE first
     # 1. Try to CREATE the macro
-    resp = requests.post(url, data=payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
+    resp = requests.post(base_url, data=payload, auth=(SPLUNK_USER, SPLUNK_PASSWORD), verify=False)
     
-    # 2. If it already exists, UPDATE it instead
+    # 2. If it already exists (409), UPDATE it instead
     if resp.status_code == 409:
         print(f"  [*] Macro already exists. Updating instead...")
-        update_url = f"{url}/{macro_name}"
+        update_url = f"{base_url}/{macro_name}"
         
-        # Remove the 'name' parameter for the update payload
         update_payload = payload.copy()
         if 'name' in update_payload:
             del update_payload['name']
