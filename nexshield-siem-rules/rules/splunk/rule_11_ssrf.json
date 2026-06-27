@@ -6,7 +6,7 @@
   "severity": "CRITICAL",
   "mitre_id": "T1190",
   "owasp": "A10:2021",
-  "cron": "*/5 * * * *",
+  "cron": "* * * * *",
   "alert_threshold": 1,
   "alert_comparator": "greater than",
   "suppress_period": 300
