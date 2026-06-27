@@ -7,7 +7,7 @@
   "mitre_id": "T1595.003",
   "owasp": "A05:2021",
   "cron": "* * * * *",
-  "alert_threshold": 1,
+  "alert_threshold": 0,
   "alert_comparator": "greater than",
   "suppress_period": 300
 }
