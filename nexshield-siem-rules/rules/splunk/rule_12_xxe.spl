@@ -1,5 +1,6 @@
 `nexshield_base`
 | eval raw_lower=lower(raw_log)
+| eval decoded_raw=lower(urldecode(raw_log))
 | eval xxe_score=0
 
 `comment("Core XXE patterns")`
