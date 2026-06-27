@@ -6,7 +6,7 @@
   "severity": "HIGH",
   "mitre_id": "T1595",
   "owasp": "A05:2021",
-  "cron": "*/5 * * * *",
+  "cron": "* * * * *",
   "alert_threshold": 1,
   "alert_comparator": "greater than",
   "suppress_period": 300
