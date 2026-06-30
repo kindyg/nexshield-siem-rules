@@ -10,7 +10,7 @@
 | eval traversal_score=traversal_score + if(match(uri_to_check, "%2e%2e[%2f%5c]|%2e%2e\/|%2e%2e\\\\"), 9, 0)
 
 `comment("Double-decoded traversal - catches double encoding")`
-| eval traversal_score=traversal_score + if(match(double_decoded, "\.\.[\/\\]"), 10, 0)
+| eval traversal_score=traversal_score + if(match(double_decoded, "\.\.\/|\.\.\\\\"), 10, 0)
 
 `comment("Double URL encoded: %252e%252e (attacker encodes the % itself)")`
 | eval traversal_score=traversal_score + if(match(uri_to_check, "%252e%252e|%25%32%65|%c0%af|%c1%9c|%e0%80%af|%ef%bc%8f"), 10, 0)
